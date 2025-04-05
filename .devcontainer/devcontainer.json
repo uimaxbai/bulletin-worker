@@ -1,4 +1,4 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/universal:2-noble",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
   "features": {}
 }
