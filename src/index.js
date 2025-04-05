@@ -1,41 +1,22 @@
-import { EmailMessage } from "cloudflare:email";
-import { createMimeMessage } from "mimetext";
+// import { EmailMessage } from "cloudflare:email";
 import {DOMParser} from 'linkedom';
 
-
-const PostalMime = require("postal-mime");
-
-async function streamToArrayBuffer(stream, streamSize) {
-  let result = new Uint8Array(streamSize);
-  let bytesRead = 0;
-  const reader = stream.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    result.set(value, bytesRead);
-    bytesRead += value.length;
-  }
-  return result;
-}
-
 export default {
-  async email(event, env, ctx) {
-    // console.log(event.from);
-    switch (event.from) {
-      case "21mbai@kes.net":
-        console.log("yay!")
-        break;
-      default:
-        console.log("nay...")
-        break;
-    }
-    const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
-    const parser = new PostalMime.default();
-    const parsedEmail = await parser.parse(rawEmail);
-    const html = parsedEmail.html;
-    const parsedHTML = (new DOMParser).parseFromString(html);
+  async scheduled(event, env, ctx) {
+    let viewState, eventValidation, viewStateGenerator;
+    fetch("https://kes.net/parent-portal/").then(d => { return d.text() })
+      .then(d => {
+        let parsedHTML = (new DOMParser).parseFromString(html);
+        viewState = parsedHTML.getElementById("__VIEWSTATE").value;
+        eventValidation = parsedHTML.getElementById("__EVENTVALIDATION").value;
+        viewStateGenerator = parsedHTML.getElementById("__VIEWSTATEGENERATOR").value;
+      });
+    
+    // TODO do this fetch
+    fetch("https://kes.net/parent-portal/", {
+      method: 'post'
+    })
+    
     const {defaultView: window} = parsedHTML;
     const {
       // provided by this module, could be native too
@@ -47,8 +28,29 @@ export default {
       // but classes can be reused
       customElements
     } = window;
+
     const pdfURL = parsedHTML.querySelector(".x_document-item a").getAttribute("href").replace("&amp;", "&");
     console.log(pdfURL);
+    const response = await fetch(pdfURL);
+    if (!response.ok) {
+      throw new Error("PDF did not fetch successfully.");
+    }
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const data = await response.arrayBuffer();
+
+    // Get filename
+    var filename = (new URL(pdfURL)).searchParams.get('u').split('/').pop() || 'downloaded-file';
+
+    if (env.BUCKET) {
+      await env.BUCKET.put(`bulletin/${filename}`, data, {
+        httpMetadata: {
+          contentType
+        }
+      });
+    } else {
+      throw new Error("R2 binding does not exist!");
+    }
+    
     
 
     // console.log(html);
